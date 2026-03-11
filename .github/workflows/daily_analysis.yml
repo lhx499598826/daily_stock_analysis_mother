@@ -261,5 +261,14 @@ jobs:
           MSG="【daily_stock_analysis】任务状态: ${STATUS}\n仓库: ${REPO}\n分支: ${REF}\n详情: ${RUN_URL}"
 
           PAYLOAD=$(printf '{"msgtype":"text","text":{"content":"%s"}}' "$(printf '%s' "$MSG" | sed 's/"/\\"/g')")
-          curl -sS "$WECOM_WEBHOOK_URL" -H 'Content-Type: application/json' -d "$PAYLOAD"
+          RESP=$(curl -sS "$WECOM_WEBHOOK_URL" \
+            --retry 3 --retry-delay 3 --retry-connrefused \
+            --connect-timeout 15 --max-time 60 \
+            -H 'Content-Type: application/json' \
+            -d "$PAYLOAD" || true)
+          if [ -z "$RESP" ]; then
+            echo "企业微信通知发送失败（已忽略，不影响主任务）"
+            exit 0
+          fi
+          echo "$RESP"
 
