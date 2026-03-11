@@ -259,11 +259,11 @@ jobs:
           REF="${{ github.ref_name }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          OVERVIEW=$(printf "【daily_stock_analysis】任务状态: %s
-仓库: %s
-分支: %s
-详情: %s" "$STATUS" "$REPO" "$REF" "$RUN_URL")
-          PAYLOAD=$(python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))' <<<"$OVERVIEW")
+          OVERVIEW="【daily_stock_analysis】任务状态: ${STATUS}
+仓库: ${REPO}
+分支: ${REF}
+详情: ${RUN_URL}"
+          PAYLOAD=$(printf "%b" "$OVERVIEW" | python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))')
           curl -sS "$WECOM_WEBHOOK_URL" --retry 3 --retry-delay 2 --retry-connrefused --connect-timeout 15 --max-time 60 -H 'Content-Type: application/json' -d "$PAYLOAD" || true
 
           mapfile -t REPORT_FILES < <(ls -t reports/*.md reports/*.txt reports/*.log 2>/dev/null || true)
@@ -271,36 +271,37 @@ jobs:
 
           if [ ${#REPORT_FILES[@]} -eq 0 ]; then
             MSG="【daily_stock_analysis】未找到 reports 下可发送文件"
-            PAYLOAD=$(python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))' <<<"$MSG")
+            PAYLOAD=$(printf "%s" "$MSG" | python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))')
             curl -sS "$WECOM_WEBHOOK_URL" --retry 3 --retry-delay 2 --retry-connrefused --connect-timeout 15 --max-time 60 -H 'Content-Type: application/json' -d "$PAYLOAD" || true
             exit 0
           fi
 
           MAX_LEN=1700
           for REPORT_FILE in "${REPORT_FILES[@]}"; do
-            echo "SENDING_FILE=$REPORT_FILE"
-            FILE_HEADER=$(printf "【报告原文】%s
-状态: %s
-详情: %s
+            BASE_NAME=$(basename "$REPORT_FILE")
+            echo "SENDING_FILE=$BASE_NAME"
+            FILE_HEADER="【报告原文】${BASE_NAME}
+状态: ${STATUS}
+详情: ${RUN_URL}
 
-" "$(basename "$REPORT_FILE")" "$STATUS" "$RUN_URL")
+"
             FILE_BODY=$(cat "$REPORT_FILE")
-            FULL_TEXT="$FILE_HEADER$FILE_BODY"
+            FULL_TEXT="$(printf "%b" "$FILE_HEADER")${FILE_BODY}"
 
             LEN=${#FULL_TEXT}
             PART=1
             TOTAL=$(( (LEN + MAX_LEN - 1) / MAX_LEN ))
-            echo "FILE_CHUNKS=$(basename "$REPORT_FILE"):$TOTAL"
+            echo "FILE_CHUNKS=${BASE_NAME}:${TOTAL}"
 
             i=0
             while [ $i -lt $LEN ]; do
               CHUNK="${FULL_TEXT:$i:$MAX_LEN}"
               if [ $TOTAL -gt 1 ]; then
-                CHUNK=$(printf "[%s %d/%d]
-%s" "$(basename "$REPORT_FILE")" "$PART" "$TOTAL" "$CHUNK")
+                CHUNK="$(printf "[%s %d/%d]
+" "$BASE_NAME" "$PART" "$TOTAL")${CHUNK}"
               fi
 
-              PAYLOAD=$(python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))' <<<"$CHUNK")
+              PAYLOAD=$(printf "%s" "$CHUNK" | python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))')
               RESP=$(curl -sS "$WECOM_WEBHOOK_URL" --retry 3 --retry-delay 2 --retry-connrefused --connect-timeout 15 --max-time 60 -H 'Content-Type: application/json' -d "$PAYLOAD" || true)
               if [ -z "$RESP" ]; then
                 echo "企业微信通知发送失败（已忽略，不影响主任务）"
