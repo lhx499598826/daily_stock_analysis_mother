@@ -261,22 +261,11 @@ jobs:
 
           REPORT_FILE=$(ls -t reports/*.md reports/*.txt reports/*.log 2>/dev/null | head -n 1 || true)
           if [ -n "$REPORT_FILE" ]; then
-            HEADER=$(printf "【daily_stock_analysis】报告全文
-状态: %s
-仓库: %s
-分支: %s
-文件: %s
-详情: %s
-
-" "$STATUS" "$REPO" "$REF" "$(basename "$REPORT_FILE")" "$RUN_URL")
+            HEADER=$(printf "【daily_stock_analysis】报告全文\n状态: %s\n仓库: %s\n分支: %s\n文件: %s\n详情: %s\n\n" "$STATUS" "$REPO" "$REF" "$(basename "$REPORT_FILE")" "$RUN_URL")
             BODY=$(cat "$REPORT_FILE")
             FULL_TEXT="$HEADER$BODY"
           else
-            FULL_TEXT=$(printf "【daily_stock_analysis】未找到报告文件
-状态: %s
-仓库: %s
-分支: %s
-详情: %s" "$STATUS" "$REPO" "$REF" "$RUN_URL")
+            FULL_TEXT=$(printf "【daily_stock_analysis】未找到报告文件\n状态: %s\n仓库: %s\n分支: %s\n详情: %s" "$STATUS" "$REPO" "$REF" "$RUN_URL")
           fi
 
           MAX_LEN=1700
@@ -289,8 +278,7 @@ jobs:
           while [ $i -lt $LEN ]; do
             CHUNK="${FULL_TEXT:$i:$MAX_LEN}"
             if [ $TOTAL -gt 1 ]; then
-              CHUNK=$(printf "[全文 %d/%d]
-%s" "$PART" "$TOTAL" "$CHUNK")
+              CHUNK=$(printf "[全文 %d/%d]\n%s" "$PART" "$TOTAL" "$CHUNK")
             fi
 
             PAYLOAD=$(python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))' <<<"$CHUNK")
