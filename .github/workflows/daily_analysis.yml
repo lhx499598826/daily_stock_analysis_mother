@@ -259,10 +259,7 @@ jobs:
           REF="${{ github.ref_name }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          OVERVIEW="【daily_stock_analysis】任务状态: ${STATUS}
-仓库: ${REPO}
-分支: ${REF}
-详情: ${RUN_URL}"
+          OVERVIEW="【daily_stock_analysis】任务状态: ${STATUS}\\n仓库: ${REPO}\\n分支: ${REF}\\n详情: ${RUN_URL}"
           PAYLOAD=$(printf "%b" "$OVERVIEW" | python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))')
           curl -sS "$WECOM_WEBHOOK_URL" --retry 3 --retry-delay 2 --retry-connrefused --connect-timeout 15 --max-time 60 -H 'Content-Type: application/json' -d "$PAYLOAD" || true
 
@@ -280,11 +277,7 @@ jobs:
           for REPORT_FILE in "${REPORT_FILES[@]}"; do
             BASE_NAME=$(basename "$REPORT_FILE")
             echo "SENDING_FILE=$BASE_NAME"
-            FILE_HEADER="【报告原文】${BASE_NAME}
-状态: ${STATUS}
-详情: ${RUN_URL}
-
-"
+            FILE_HEADER="【报告原文】${BASE_NAME}\\n状态: ${STATUS}\\n详情: ${RUN_URL}\\n\\n"
             FILE_BODY=$(cat "$REPORT_FILE")
             FULL_TEXT="$(printf "%b" "$FILE_HEADER")${FILE_BODY}"
 
@@ -297,8 +290,7 @@ jobs:
             while [ $i -lt $LEN ]; do
               CHUNK="${FULL_TEXT:$i:$MAX_LEN}"
               if [ $TOTAL -gt 1 ]; then
-                CHUNK="$(printf "[%s %d/%d]
-" "$BASE_NAME" "$PART" "$TOTAL")${CHUNK}"
+                CHUNK="$(printf "[%s %d/%d]\\n" "$BASE_NAME" "$PART" "$TOTAL")${CHUNK}"
               fi
 
               PAYLOAD=$(printf "%s" "$CHUNK" | python3 -c 'import json,sys; print(json.dumps({"msgtype":"text","text":{"content":sys.stdin.read()}}, ensure_ascii=False))')
