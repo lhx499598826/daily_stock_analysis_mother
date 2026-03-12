@@ -25,10 +25,10 @@ on:
         default: false
         type: boolean
 
-# 并发控制：同一时间只运行一个分析任务
+# 并发控制：新触发会取消同分支旧任务，避免卡住后后续定时任务不触发
 concurrency:
-  group: stock-analysis
-  cancel-in-progress: false
+  group: stock-analysis-${{ github.repository }}-${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
