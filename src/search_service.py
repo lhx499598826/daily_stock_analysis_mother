@@ -1483,36 +1483,89 @@ class SearchService:
             ]
         
         logger.info(f"开始多维度情报搜索: {stock_name}({stock_code})")
-        
+
+        # 小预算模式：支持“搜一补一”（max_searches<=2）
+        # 先跑 latest_news，再根据风险词命中决定第二轮跑 risk_check 或 market_analysis
+        execution_plan = list(search_dimensions)
+        if max_searches <= 2 and len(search_dimensions) >= 3:
+            latest_dim = next((d for d in search_dimensions if d['name'] == 'latest_news'), search_dimensions[0])
+            market_dim = next((d for d in search_dimensions if d['name'] == 'market_analysis'), search_dimensions[1])
+            risk_dim = next((d for d in search_dimensions if d['name'] == 'risk_check'), search_dimensions[2])
+
+            execution_plan = [latest_dim]
+
+            # 先执行 latest_news，随后再决定补搜维度
+            dims_tail = [market_dim, risk_dim]
+        else:
+            dims_tail = []
+
+        # 风险关键词（用于判断是否需要补搜风险维度）
+        risk_keywords = [
+            '减持', '处罚', '立案', '诉讼', '问询函', '业绩预亏', '暴雷', '违约',
+            'insider selling', 'lawsuit', 'investigation', 'warning', 'guidance cut'
+        ]
+
         # 轮流使用不同的搜索引擎
         provider_index = 0
-        
-        for dim in search_dimensions:
-            if search_count >= max_searches:
-                break
-            
-            # 选择搜索引擎（轮流使用）
+
+        def _run_dim(dim):
+            nonlocal provider_index, search_count
             available_providers = [p for p in self._providers if p.is_available]
             if not available_providers:
-                break
-            
+                return None
+
             provider = available_providers[provider_index % len(available_providers)]
             provider_index += 1
-            
+
             logger.info(f"[情报搜索] {dim['desc']}: 使用 {provider.name}")
-            
             response = provider.search(dim['query'], max_results=3, days=self.news_max_age_days)
             results[dim['name']] = response
             search_count += 1
-            
+
             if response.success:
                 logger.info(f"[情报搜索] {dim['desc']}: 获取 {len(response.results)} 条结果")
             else:
                 logger.warning(f"[情报搜索] {dim['desc']}: 搜索失败 - {response.error_message}")
-            
-            # 短暂延迟避免请求过快
+
             time.sleep(0.5)
-        
+            return response
+
+        # 正常计划先执行
+        for dim in execution_plan:
+            if search_count >= max_searches:
+                break
+            if _run_dim(dim) is None:
+                return results
+
+        # “搜一补一”第二轮：按 latest_news 是否命中风险关键词决定补搜方向
+        if dims_tail and search_count < max_searches:
+            latest_resp = results.get('latest_news')
+            text_blob = ''
+            if latest_resp and latest_resp.results:
+                parts = []
+                for r in latest_resp.results:
+                    parts.append(r.title or '')
+                    parts.append(r.snippet or '')
+                text_blob = ' '.join(parts).lower()
+
+            has_risk_hit = any(k.lower() in text_blob for k in risk_keywords)
+            second_dim = dims_tail[0] if has_risk_hit else dims_tail[1]
+            logger.info(
+                f"[情报搜索] 搜一补一策略: latest_news风险命中={'是' if has_risk_hit else '否'}，"
+                f"第二轮选择 {second_dim['name']}"
+            )
+            _run_dim(second_dim)
+
+        # max_searches>2 时，按原顺序继续补齐
+        if max_searches > 2:
+            for dim in search_dimensions:
+                if search_count >= max_searches:
+                    break
+                if dim['name'] in results:
+                    continue
+                if _run_dim(dim) is None:
+                    break
+
         return results
     
     def format_intel_report(self, intel_results: Dict[str, SearchResponse], stock_name: str) -> str:
